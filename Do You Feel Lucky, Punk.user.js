@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      0.1
+// @version      0.2
 // @description  calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -30,7 +30,7 @@ var calculateExpectedPageValue = function(input) {
             return copies / entries;
         })
         .get() // turn it into an array
-        .reduce(function(x, y) { return x + y}, 0); // sum, default to 0
+        .reduce(function(x, y) { return x + y }, 0); // sum, default to 0
 }
 
 var fetchPage = function(i, callback) {
@@ -59,7 +59,7 @@ var calculateTotalExpectedValue = function(evt) {
                         }
                     });
                 }
-            })(i), (i - 1) * Math.max(((MAX_DURATION * 1000) / lastPage), MAX_DURATION / MAX_PAGES));
+            })(i), (i - 1) * ((MAX_DURATION * 1000) / lastPage));
             // take about 1 minute to fetch all pages, but always take at least 300ms per req to try to avoid overloading SG
         }
     }
