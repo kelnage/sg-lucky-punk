@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      0.5.1
+// @version      1.0.0
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -12,16 +12,30 @@
 /* jshint -W097 */
 'use strict';
 
-var MAX_PAGES = 200; // pages
-var MAX_DURATION = 60; // seconds
+var WAIT_MILLIS = 600;
 var URL_FORMAT = "http://www.steamgifts.com/giveaways/entered/search";
 
 var working = false;
-var lastPage = Math.min(
-    new Number($(".pagination__navigation").children(":last").filter(":contains('Last')").attr("data-page-number")), 
-    MAX_PAGES); // don't look at more than 200 pages of entered GAs
-if(!lastPage || lastPage < 1 || lastPage > MAX_PAGES) {
-    lastPage = MAX_PAGES; // if we can't find the last page link - might cause users with only 1 page to get incorrect results!
+var lastPage = Math.ceil(new Number($("div.pagination__results").children("strong:last").text().replace(/,/, "")) / 50); // assumes that there are always 50 GAs on a page
+
+var formatTime = function(millis) {
+    millis = new Number(millis);
+    if(millis < 1000) {
+        return millis.toFixed(0) + "ms";
+    } else {
+        var seconds = millis / 1000;
+        if(seconds < 60) {
+            return seconds.toFixed(0) + " seconds";
+        } else {
+            var minutes = seconds / 60;
+            if(minutes < 60) {
+                return minutes.toFixed(0) + " minutes";
+            } else {
+                var hours = minutes / 60;
+                return hours.toFixed(1) + " hours";
+            }
+        }
+    }
 }
 
 var calculateExpectedPageValue = function(input) {
@@ -41,20 +55,16 @@ var calculateExpectedPageValue = function(input) {
         .reduce(function(x, y) { return x + y }, 0); // sum, default to 0
 }
 
-var fetchPage = function(i, callback) {
-    $.get(URL_FORMAT, {"page": i}, callback);
-}
-
-var calculateTotalExpectedValue = function(evt) {
+var calculateExpectedTotalValue = function(evt) {
     evt.preventDefault();
     if(!working) {
         working = true;
-        $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take about 1 minute");
+        $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take about " + formatTime(lastPage * WAIT_MILLIS));
         var totalExpectedValue = 0, finished = 0;
         for(var i = 1; i <= lastPage; i++) {
             setTimeout((function(i) { // using a closure because javascript
                 return function() {
-                    fetchPage(i, function(data) {
+                    $.get(URL_FORMAT, {"page": i}, function(data) {
                         var exp = calculateExpectedPageValue(data);
                         totalExpectedValue += exp;
                         finished += 1;
@@ -64,12 +74,11 @@ var calculateTotalExpectedValue = function(evt) {
                             working = false;
                         } else {
                             $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take another " + 
-                                                       new Number(MAX_DURATION - ((finished - 1) * (MAX_DURATION / lastPage))).toFixed(0) + " seconds");
+                                                       formatTime((lastPage - finished) * WAIT_MILLIS));
                         }
                     });
                 }
-            })(i), (i - 1) * ((MAX_DURATION * 1000) / lastPage));
-            // take about 1 minute to fetch all pages, won't look at more than 200 pages
+            })(i), (i - 1) * WAIT_MILLIS);
         }
     }
     return false;
@@ -77,7 +86,7 @@ var calculateTotalExpectedValue = function(evt) {
 
 var $section = $("<div style=\"padding: 0.5em 0\"></div>");
 var $btn = $("<a href=\"#\" id=\"punk_button\" style=\"font-weight: bold\">Do You Feel Lucky, Punk?</a>")
-    .click(calculateTotalExpectedValue);
+    .click(calculateExpectedTotalValue);
 $section.append($btn);
 $section.append("<span id=\"punk_result\" style=\"padding-left: 0.3em\"></span>");
 $(".page__heading").after($section);
