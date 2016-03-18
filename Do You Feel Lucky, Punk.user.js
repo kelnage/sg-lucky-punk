@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      0.5
+// @version      0.5.1
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -59,7 +59,7 @@ var calculateTotalExpectedValue = function(evt) {
                         totalExpectedValue += exp;
                         finished += 1;
                         if(finished == lastPage) {
-                            $("span#punk_result").html("Based on the finished GAs you have entered, you would expect to have won about <strong>" + 
+                            $("span#punk_result").html("Based on the finished GAs you have entered, you would expect to have won approximately <strong>" + 
                                                        new Number(totalExpectedValue).toFixed(1) + "</strong> of them");
                             working = false;
                         } else {
