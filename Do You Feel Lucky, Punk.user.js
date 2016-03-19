@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.0.2
+// @version      1.1.0
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -18,6 +18,24 @@ var URL_FORMAT = "http://www.steamgifts.com/giveaways/entered/search";
 var working = false;
 // assumes that there are always 50 GAs on a page
 var lastPage = Math.ceil(new Number($("div.pagination__results").children("strong:last").text().replace(/,/, "")) / 50);
+
+// taken from StackOverflow: http://stackoverflow.com/a/3855394
+var qs = (function(a) {
+    if (a == "") {
+        return {};
+    }
+    var b = {};
+    for (var i = 0; i < a.length; ++i) {
+        var p = a[i].split('=', 2);
+        if (p.length == 1) {
+            b[p[0]] = "";
+        }
+        else {
+            b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
+        }
+    }
+    return b;
+})(window.location.search.substr(1).split('&'));
 
 var formatTime = function(millis) {
     millis = new Number(millis);
@@ -67,7 +85,7 @@ var calculateExpectedTotalValue = function(evt) {
         for(var i = 1; i <= lastPage; i++) {
             setTimeout((function(i) { // using a closure because javascript
                 return function() {
-                    $.get(URL_FORMAT, {"page": i}, function(data) {
+                    $.get(URL_FORMAT, {"q": qs["q"], "page": i}, function(data) {
                         var exp = calculateExpectedPageValue(data);
                         totalExpectedValue += exp;
                         finished += 1;
