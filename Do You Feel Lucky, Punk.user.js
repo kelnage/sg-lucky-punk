@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.0.0
+// @version      1.0.1
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -16,7 +16,8 @@ var WAIT_MILLIS = 600;
 var URL_FORMAT = "http://www.steamgifts.com/giveaways/entered/search";
 
 var working = false;
-var lastPage = Math.ceil(new Number($("div.pagination__results").children("strong:last").text().replace(/,/, "")) / 50); // assumes that there are always 50 GAs on a page
+// assumes that there are always 50 GAs on a page
+var lastPage = Math.ceil(new Number($("div.pagination__results").children("strong:last").text().replace(/,/, "")) / 50);
 
 var formatTime = function(millis) {
     millis = new Number(millis);
@@ -25,14 +26,14 @@ var formatTime = function(millis) {
     } else {
         var seconds = millis / 1000;
         if(seconds < 60) {
-            return seconds.toFixed(0) + " seconds";
+            return seconds.toFixed(0) + " second" + (seconds < 1.5 ? "" : "s");
         } else {
             var minutes = seconds / 60;
             if(minutes < 60) {
-                return minutes.toFixed(0) + " minutes";
+                return minutes.toFixed(0) + " minute" + (minutes < 1.5 ? "" : "s");
             } else {
                 var hours = minutes / 60;
-                return hours.toFixed(1) + " hours";
+                return hours.toFixed(1) + " hour" + (hours <= 1.95 ? "" : "s");
             }
         }
     }
@@ -41,14 +42,15 @@ var formatTime = function(millis) {
 var calculateExpectedPageValue = function(input) {
     return $(".table__row-inner-wrap", input)
         .filter(function(i) {
-            return $($(this).children().get(4)).text() == "-";  // ignore GAs that haven't finished
+            // ignore GAs that haven't finished or have been deleted
+            return $($(this).children().get(4)).text() == "-" &&
+                $(this).find("p.table__column__deleted").size() == 0;
         })
         .map(function(i, e) {
             var $e = $(e);
             var copies = $e.find("a.table__column__heading").text().match(/\(([0-9]+) Copies\)/); 
             copies = (copies == null ? 1 : copies[1]); // only multi-GAs have the (X Copies) text in their title, default to 1 copy
             var entries = $($e.children().get(2)).text().replace(/,/, ""); // remove number formatting
-            // console.debug(copies, entries, copies / entries)
             return copies / entries;
         })
         .get() // turn it into an array
@@ -59,7 +61,8 @@ var calculateExpectedTotalValue = function(evt) {
     evt.preventDefault();
     if(!working) {
         working = true;
-        $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take about " + formatTime(lastPage * WAIT_MILLIS));
+        $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take about " + 
+                                   formatTime(lastPage * WAIT_MILLIS));
         var totalExpectedValue = 0, finished = 0;
         for(var i = 1; i <= lastPage; i++) {
             setTimeout((function(i) { // using a closure because javascript
@@ -69,12 +72,14 @@ var calculateExpectedTotalValue = function(evt) {
                         totalExpectedValue += exp;
                         finished += 1;
                         if(finished == lastPage) {
-                            $("span#punk_result").html("Based on the finished GAs you have entered, you would expect to have won approximately <strong>" + 
-                                                       new Number(totalExpectedValue).toFixed(1) + "</strong> of them");
+                            $("span#punk_result").html(
+                                "Based on the finished GAs you have entered, you would expect to have won approximately <strong>" + 
+                                new Number(totalExpectedValue).toFixed(1) + "</strong> of them");
                             working = false;
                         } else {
-                            $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take another " + 
-                                                       formatTime((lastPage - finished) * WAIT_MILLIS));
+                            $("span#punk_result").text(
+                                "Calculating your odds of success now. Please be patient - this should take another " + 
+                                formatTime((lastPage - finished) * WAIT_MILLIS));
                         }
                     });
                 }
