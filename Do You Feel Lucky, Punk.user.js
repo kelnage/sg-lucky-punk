@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.1.0
+// @version      1.1.1
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -36,6 +36,37 @@ var qs = (function(a) {
     }
     return b;
 })(window.location.search.substr(1).split('&'));
+
+var parseSteamGiftsTime = function(sg_time) {
+    var parts = sg_time.match(/^(.*), ([0-9]+):([0-9]+)(am|pm)$/);
+    var day = parts[1], hours = new Number(parts[2]), mins = new Number(parts[3]), period = parts[4];
+    var result = new Date();
+    switch(day) {
+        case "Today":
+            break;
+        case "Yesterday":
+            result.setDate(result.getDate() - 1);
+            break;
+        case "Tomorrow":
+            result.setDate(result.getDate() + 1);
+            break;
+        default:
+            result = new Date(parts[1]);
+            break;
+    }
+    if(period == "am" && hours == 12) {
+        result.setHours(0);
+    } else if(period == "am") {
+        result.setHours(hours);
+    } else if(hours == 12) {
+        result.setHours(12);
+    } else {
+        result.setHours(hours + 12);
+    }
+    result.setMinutes(mins);
+    result.setSeconds(0);
+    return result;
+}
 
 var formatTime = function(millis) {
     millis = new Number(millis);
