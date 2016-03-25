@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.2.0
+// @version      1.2.1
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -157,9 +157,18 @@ var calculateExpectedTotalValue = function(evt) {
                                 totalExpectedValue.toFixed(1) + "</strong> of them. <a href=\"#\" id=\"punk_show_plot\" style=\"font-weight: bold\">Plot it!</a>");
                             $("#punk_show_plot").click(function(evt) {
                                 evt.preventDefault();
+                                var orderedExpectations = [];
                                 for(var day in dailySum) {
-                                    plot.x.push(day);
-                                    plot.y.push(dailySum[day]);
+                                    orderedExpectations.push({"day": day, "expect": dailySum[day]});
+                                }
+                                // ensure ordering by day - possibly not necessary, but best to check anyway
+                                orderedExpectations.sort(function(a, b) { return (a.day < b.day ? -1 : (a.day > b.day ? 1 : 0)); });
+                                var sum = 0;
+                                for(var i in orderedExpectations) {
+                                    var dailyExpectation = orderedExpectations[i];
+                                    sum += dailyExpectation.expect;
+                                    plot.x.push(dailyExpectation.day);
+                                    plot.y.push(sum);
                                 }
                                 Plotly.newPlot('punk_plot', new Array(plot));
                                 $('#punk_plot').show();
