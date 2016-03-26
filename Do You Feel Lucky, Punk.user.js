@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.2.1
+// @version      1.3.0
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -13,8 +13,10 @@
 /* jshint -W097 */
 'use strict';
 
-var WAIT_MILLIS = 600;
-var URL_FORMAT = "http://www.steamgifts.com/giveaways/entered/search";
+var WAIT_MILLIS = 500;
+var PAGE_LOAD = 300;
+var ENTERED_URL = "http://www.steamgifts.com/giveaways/entered/search";
+var WINS_URL = "http://www.steamgifts.com/giveaways/won/search";
 
 var working = false;
 // assumes that there are always 50 GAs on a page
@@ -69,6 +71,13 @@ var parseSteamGiftsTime = function(sg_time) {
     return result;
 };
 
+var dateToDayString = function(date) {
+    var day = new Date(date);
+    day.setMinutes(0);
+    day.setHours(0);
+    return day.toISOString().replace(/T/, " ").replace(/\.[0-9]{3}Z/, "");
+};
+
 var formatTime = function(millis) {
     millis = parseInt(millis, 10);
     if(millis < 1000) {
@@ -102,35 +111,74 @@ var extractEntries = function(input) {
             copies = (copies === null ? 1 : parseInt(copies[1], 10)); // only multi-GAs have the (X Copies) text in their title, default to 1 copy
             var entries = parseInt($($e.children().get(2)).text().replace(/,/, ""), 10); // remove number formatting
             var date = parseSteamGiftsTime($($e.find("div:nth-child(2) > p:nth-child(2) > span")).attr("title"));
-            return {"copies": copies, "entries": entries, "date": date};
+            return {"copies": copies, "entries": entries, "date": date, "value": copies / entries};
         })
         .get();
 };
 
-var calculateExpectedPageValue = function(entries) {
-    return entries.map(function(entry) { return entry.copies / entry.entries; })
-        .reduce(function(x, y) { return x + y; }, 0); // sum, default to 0
+var extractWon = function(input) {
+    return $(".table__row-inner-wrap", input)
+        .filter(function(i) {
+            return $(this).find("div.table__gift-feedback-received > i.fa-check-circle").size() == 1;
+        })
+        .map(function(i, e) {
+            var date = parseSteamGiftsTime($($(e).find("div:nth-child(2) > p:nth-child(2) > span")).attr("title"));
+            return {"date": date, "value": 1};
+        })
+        .get();
 };
 
-var addEntriesToPlot = function(entries, plot) {
-    entries.forEach(function(entry) {
-        plot.x.push(entry.date.toISOString().replace(/T/, " ").replace(/\.[0-9]{3}Z/, ""));
-        plot.y.push(entry.copies / entry.entries);
-    });
-};
-
-var summariseDailyEntries = function(entries, dailySum) {
-    entries.forEach(function(entry) {
-        var day = new Date(entry.date);
-        day.setMinutes(0);
-        day.setHours(0);
-        var dayString = day.toISOString().replace(/T/, " ").replace(/\.[0-9]{3}Z/, "");
+var summariseDailyValues = function(giveaways, dailySum) {
+    giveaways.forEach(function(ga) {
+        var dayString = dateToDayString(ga.date);
         if(dayString in dailySum) {
-            dailySum[dayString] += entry.copies / entry.entries;
+            dailySum[dayString] += ga.value;
         } else {
-            dailySum[dayString] = entry.copies / entry.entries;
+            dailySum[dayString] = ga.value;
         }
     });
+};
+
+var fetchWon = function(dailyWins, page, callback) {
+    $.get(WINS_URL, {"page": page}, function(data) {
+        summariseDailyValues(extractWon(data), dailyWins);
+        if($("div.pagination__navigation > a > span:contains('Next')", data).size() === 1) {
+            setTimeout(function() {
+                fetchWon(dailyWins, page + 1, callback);
+            }, WAIT_MILLIS);
+        } else {
+            callback();
+        }
+    });
+};
+
+var fetchEntered = function(dailyEntered, page, callback) {
+    $.get(ENTERED_URL, {"q": qs.q, "page": page}, function(data) {
+        summariseDailyValues(extractEntries(data), dailyEntered);
+        if($("div.pagination__navigation > a > span:contains('Next')", data).size() === 1) {
+            setTimeout(function() {
+                fetchEntered(dailyEntered, page + 1, callback);
+            }, WAIT_MILLIS);
+            $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take another " + 
+                                       formatTime((lastPage - page) * (WAIT_MILLIS + PAGE_LOAD)));
+        } else {
+            callback();
+        }
+    });
+};
+
+var sortDateMapAndPlot = function(map, plot, cumulative) {
+    var list = [], total = 0;
+    for(var day in map) {
+        list.push([day, map[day]]);
+    }
+    list.sort(function(a, b) { return (a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0)); });
+    for(var i in list) {
+        total += list[i][1];
+        plot.x.push(list[i][0]);
+        plot.y.push((cumulative ? total : list[i][1]));
+    }
+    return total;
 };
 
 var calculateExpectedTotalValue = function(evt) {
@@ -138,53 +186,45 @@ var calculateExpectedTotalValue = function(evt) {
     if(!working) {
         working = true;
         $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take about " + 
-                                   formatTime(lastPage * WAIT_MILLIS));
-        var totalExpectedValue = 0, finished = 0, plot = {"x": [], "y": [], "type": "bar"}, dailySum = {};
-        for(var i = 1; i <= lastPage; i++) {
-            setTimeout((function(i) { // using a closure because javascript
-                return function() {
-                    $.get(URL_FORMAT, {"q": qs.q, "page": i}, function(data) {
-                        var entries = extractEntries(data),
-                            exp = calculateExpectedPageValue(entries);
-                        // addEntriesToPlot(entries, plot);
-                        summariseDailyEntries(entries, dailySum);
-                        totalExpectedValue += exp;
-                        finished += 1;
-                        if(finished == lastPage) {
-                            $("span#punk_result").html(
-                                "Based on the finished GAs you have entered, you would expect to have won approximately <strong title=\"" +
-                                totalExpectedValue.toFixed(4) + "\">" + 
-                                totalExpectedValue.toFixed(1) + "</strong> of them. <a href=\"#\" id=\"punk_show_plot\" style=\"font-weight: bold\">Plot it!</a>");
-                            $("#punk_show_plot").click(function(evt) {
-                                evt.preventDefault();
-                                var orderedExpectations = [];
-                                for(var day in dailySum) {
-                                    orderedExpectations.push({"day": day, "expect": dailySum[day]});
-                                }
-                                // ensure ordering by day - possibly not necessary, but best to check anyway
-                                orderedExpectations.sort(function(a, b) { return (a.day < b.day ? -1 : (a.day > b.day ? 1 : 0)); });
-                                var sum = 0;
-                                for(var i in orderedExpectations) {
-                                    var dailyExpectation = orderedExpectations[i];
-                                    sum += dailyExpectation.expect;
-                                    plot.x.push(dailyExpectation.day);
-                                    plot.y.push(sum);
-                                }
-                                Plotly.newPlot('punk_plot', new Array(plot));
-                                $('#punk_plot').show();
-                                $("#punk_show_plot").hide();
-                                return false;
-                            });
-                            working = false;
-                        } else {
-                            $("span#punk_result").text(
-                                "Calculating your odds of success now. Please be patient - this should take another " + 
-                                formatTime((lastPage - finished) * WAIT_MILLIS));
-                        }
-                    });
-                }
-            })(i), (i - 1) * WAIT_MILLIS);
+                                   formatTime(lastPage * (WAIT_MILLIS + PAGE_LOAD)));
+        var totalWon = 0, dailySum = {}, dailyWins = {},
+            expectedWins = {"x": [], "y": [], "type": "bar", "name": "Expected wins"},
+            actualWins = {"x": [], "y": [], "type": "scatter", "name": "Actual wins"};
+        // assumes that fetching won GAs will be quicker than fetching entered GAs
+        // if searching won GAs works, then could do this also with query
+        if(!qs.q) {
+            fetchWon(dailyWins, 1, function() {
+                totalWon = sortDateMapAndPlot(dailyWins, actualWins, true);
+            });
         }
+        fetchEntered(dailySum, 1, function() {
+            var totalExpectedValue = sortDateMapAndPlot(dailySum, expectedWins, true);
+            if(qs.q) {
+                $("span#punk_result").html(
+                    "Based on the finished GAs you have entered for \"" + qs.q + "\", you would expect to have won approximately <strong title=\"" +
+                    totalExpectedValue.toFixed(4) + "\">" + 
+                    totalExpectedValue.toFixed(1) + "</strong> of them. <a href=\"#\" id=\"punk_show_plot\" style=\"font-weight: bold\">Plot it!</a>");
+            } else {
+                var luckRatio = (totalWon / totalExpectedValue) * 100;
+                $("span#punk_result").html(
+                    "Based on the finished GAs you have entered, you would expect to have won approximately <strong title=\"" +
+                    totalExpectedValue.toFixed(4) + "\">" + 
+                    totalExpectedValue.toFixed(1) + "</strong> of them. You are <strong>" + luckRatio.toFixed(0) + "%</strong> " +
+                    (totalExpectedValue < totalWon ? "lucky" : "unlucky" ) + "! <a href=\"#\" id=\"punk_show_plot\" style=\"font-weight: bold\">Plot it!</a>");
+            }
+            $("#punk_show_plot").click(function(evt) {
+                evt.preventDefault();
+                var plots = [expectedWins];
+                if(!qs.q) {
+                    plots.push(actualWins);
+                }
+                Plotly.newPlot('punk_plot', plots);
+                $('#punk_plot').show();
+                $("#punk_show_plot").hide();
+                return false;
+            });
+            working = false;
+        });
     }
     return false;
 };
