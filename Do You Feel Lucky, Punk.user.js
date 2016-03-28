@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.3.0
+// @version      1.3.1
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -159,8 +159,13 @@ var fetchEntered = function(dailyEntered, page, callback) {
             setTimeout(function() {
                 fetchEntered(dailyEntered, page + 1, callback);
             }, WAIT_MILLIS);
-            $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take another " + 
-                                       formatTime((lastPage - page) * (WAIT_MILLIS + PAGE_LOAD)));
+            if(isNaN(lastPage)) {
+                $("span#punk_result").text("Calculating your odds of success now. Please be patient - I've requested " + 
+                                           page + " page(s) of your entered GAs");
+            } else {
+                $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take another " + 
+                                           formatTime((lastPage - page) * (WAIT_MILLIS + PAGE_LOAD)));
+            }
         } else {
             callback();
         }
@@ -185,8 +190,12 @@ var calculateExpectedTotalValue = function(evt) {
     evt.preventDefault();
     if(!working) {
         working = true;
-        $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take about " + 
-                                   formatTime(lastPage * (WAIT_MILLIS + PAGE_LOAD)));
+        if(isNaN(lastPage)) {
+            $("span#punk_result").text("Calculating your odds of success now. Please be patient - this could take a little while...");
+        } else {
+            $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take about " + 
+                                       formatTime(lastPage * (WAIT_MILLIS + PAGE_LOAD)));
+        }
         var totalWon = 0, dailySum = {}, dailyWins = {},
             expectedWins = {"x": [], "y": [], "type": "bar", "name": "Expected wins"},
             actualWins = {"x": [], "y": [], "type": "scatter", "name": "Actual wins"};
