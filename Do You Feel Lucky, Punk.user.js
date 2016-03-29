@@ -17,6 +17,7 @@ var WAIT_MILLIS = 500;
 var PAGE_LOAD = 300;
 var ENTERED_URL = "http://www.steamgifts.com/giveaways/entered/search";
 var WINS_URL = "http://www.steamgifts.com/giveaways/won/search";
+var BAD_DATES = [{"begin": new Date(2014, 5, 1), "end": new Date(2014, 9, 19)}];
 
 var working = false;
 // assumes that there are always 50 GAs on a page
@@ -71,6 +72,16 @@ var parseSteamGiftsTime = function(sg_time) {
     return result;
 };
 
+var filterBadDates = function(giveaway) {
+    for(var i in BAD_DATES) {
+        var range = BAD_DATES[i];
+        if(giveaway.date >= range.begin && giveaway.date < range.end) {
+            return false;
+        }
+    }
+    return true;
+}
+
 var dateToDayString = function(date) {
     var day = new Date(date);
     day.setMinutes(0);
@@ -113,6 +124,7 @@ var extractEntries = function(input) {
             var date = parseSteamGiftsTime($($e.find("div:nth-child(2) > p:nth-child(2) > span")).attr("title"));
             return {"copies": copies, "entries": entries, "date": date, "value": copies / entries};
         })
+        .filter(filterBadDates)
         .get();
 };
 
@@ -125,6 +137,7 @@ var extractWon = function(input) {
             var date = parseSteamGiftsTime($($(e).find("div:nth-child(2) > p:nth-child(2) > span")).attr("title"));
             return {"date": date, "value": 1};
         })
+        .filter(filterBadDates)
         .get();
 };
 
@@ -160,10 +173,10 @@ var fetchEntered = function(dailyEntered, page, callback) {
                 fetchEntered(dailyEntered, page + 1, callback);
             }, WAIT_MILLIS);
             if(isNaN(lastPage)) {
-                $("span#punk_result").text("Calculating your odds of success now. Please be patient - I've requested " + 
+                $("span#punk_result").text(" Calculating your odds of success now. Please be patient - I've requested " + 
                                            page + " page(s) of your entered GAs");
             } else {
-                $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take another " + 
+                $("span#punk_result").text(" Calculating your odds of success now. Please be patient - this should take another " + 
                                            formatTime((lastPage - page) * (WAIT_MILLIS + PAGE_LOAD)));
             }
         } else {
@@ -193,7 +206,7 @@ var calculateExpectedTotalValue = function(evt) {
         if(isNaN(lastPage)) {
             $("span#punk_result").text("Calculating your odds of success now. Please be patient - this could take a little while...");
         } else {
-            $("span#punk_result").text("Calculating your odds of success now. Please be patient - this should take about " + 
+            $("span#punk_result").text(" Calculating your odds of success now. Please be patient - this should take about " + 
                                        formatTime(lastPage * (WAIT_MILLIS + PAGE_LOAD)));
         }
         var totalWon = 0, dailySum = {}, dailyWins = {},
@@ -210,16 +223,16 @@ var calculateExpectedTotalValue = function(evt) {
             var totalExpectedValue = sortDateMapAndPlot(dailySum, expectedWins, true);
             if(qs.q) {
                 $("span#punk_result").html(
-                    "Based on the finished GAs you have entered for \"" + qs.q + "\", you would expect to have won approximately <strong title=\"" +
+                    " Based on the finished GAs you have entered for \"" + qs.q + "\", you would expect to have won approximately <strong title=\"" +
                     totalExpectedValue.toFixed(4) + "\">" + 
                     totalExpectedValue.toFixed(1) + "</strong> of them. <a href=\"#\" id=\"punk_show_plot\" style=\"font-weight: bold\">Plot it!</a>");
             } else {
                 var luckRatio = (totalWon / totalExpectedValue) * 100;
                 $("span#punk_result").html(
-                    "Based on the finished GAs you have entered, you would expect to have won approximately <strong title=\"" +
+                    " Based on the finished GAs you have entered, you would expect to have won approximately <strong title=\"" +
                     totalExpectedValue.toFixed(4) + "\">" + 
-                    totalExpectedValue.toFixed(1) + "</strong> of them. That is <strong>" + luckRatio.toFixed(0) + "%</strong> of your actual won GAs - " +
-                    (totalExpectedValue < totalWon ? "lucky you" : "unlucky" ) + "! <a href=\"#\" id=\"punk_show_plot\" style=\"font-weight: bold\">Plot it!</a>");
+                    totalExpectedValue.toFixed(1) + "</strong> of them. You've won <strong>" + luckRatio.toFixed(0) + "%</strong> of expected GAs - " +
+                    (luckRatio.toFixed(0) >= 100 ? "lucky you" : "unlucky" ) + "! <a href=\"#\" id=\"punk_show_plot\" style=\"font-weight: bold\">Plot it!</a>");
             }
             $("#punk_show_plot").click(function(evt) {
                 evt.preventDefault();
@@ -242,6 +255,6 @@ var $section = $("<div style=\"padding: 0.5em 0\"></div>");
 var $btn = $("<a href=\"#\" id=\"punk_button\" style=\"font-weight: bold\">Do You Feel Lucky, Punk?</a>")
     .click(calculateExpectedTotalValue);
 $section.append($btn);
-$section.append("<span id=\"punk_result\" style=\"padding-left: 0.3em\"></span>");
+$section.append("<span id=\"punk_result\"></span>");
 $section.append("<div id=\"punk_plot\" style=\"display: none; padding: 0.3em 0; width: " + $('.page__heading').width() + "px; height: 400px;\"></div>")
 $(".page__heading").after($section);
