@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.3.1
+// @version      1.3.2
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -218,8 +218,8 @@ var calculateExpectedTotalValue = function(evt) {
                 $("span#punk_result").html(
                     "Based on the finished GAs you have entered, you would expect to have won approximately <strong title=\"" +
                     totalExpectedValue.toFixed(4) + "\">" + 
-                    totalExpectedValue.toFixed(1) + "</strong> of them. You are <strong>" + luckRatio.toFixed(0) + "%</strong> " +
-                    (totalExpectedValue < totalWon ? "lucky" : "unlucky" ) + "! <a href=\"#\" id=\"punk_show_plot\" style=\"font-weight: bold\">Plot it!</a>");
+                    totalExpectedValue.toFixed(1) + "</strong> of them. That is <strong>" + luckRatio.toFixed(0) + "%</strong> of your actual won GAs - " +
+                    (totalExpectedValue < totalWon ? "lucky you" : "unlucky" ) + "! <a href=\"#\" id=\"punk_show_plot\" style=\"font-weight: bold\">Plot it!</a>");
             }
             $("#punk_show_plot").click(function(evt) {
                 evt.preventDefault();
