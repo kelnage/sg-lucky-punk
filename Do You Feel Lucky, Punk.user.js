@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.3.2
+// @version      1.4.0
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
