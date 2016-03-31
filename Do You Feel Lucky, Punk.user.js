@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.5.1
+// @version      1.5.2
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -13,17 +13,42 @@
 /* jshint -W097 */
 'use strict';
 
+// taken from StackOverflow: http://stackoverflow.com/a/3855394
+var qs = (function(a) {
+    if (a === "") {
+        return {};
+    }
+    var b = {};
+    for (var i = 0; i < a.length; ++i) {
+        var p = a[i].split('=', 2);
+        if (p.length == 1) {
+            b[p[0]] = "";
+        }
+        else {
+            b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
+        }
+    }
+    return b;
+})(window.location.search.substr(1).split('&'));
+
 var WAIT_MILLIS = 500;
 var PAGE_LOAD = 300;
 var ENTERED_URL = "http://www.steamgifts.com/giveaways/entered/search";
 var WINS_URL = "http://www.steamgifts.com/giveaways/won/search";
 var BAD_DATES = [{"begin": new Date(2014, 4, 1), "end": new Date(2014, 9, 19)}];
 
+var searchSuffix = (function(q) {
+    if(q) {
+        return "_" + q.toUpperCase().replace(/[^0-9A-Z]/g, "_");
+    }
+    return "";
+})(qs.q);
+
 // Local storage keys for caching results
-var LAST_CACHED_WIN = "PUNK_LAST_CACHED_WINS";
-var CACHED_WINS = "PUNK_CACHED_WINS";
-var LAST_CACHED_ENTERED = "PUNK_LAST_CACHED_ENTERED";
-var CACHED_ENTERED = "PUNK_CACHED_ENTERED";
+var LAST_CACHED_WIN = "PUNK_LAST_CACHED_WINS" + searchSuffix;
+var CACHED_WINS = "PUNK_CACHED_WINS" + searchSuffix;
+var LAST_CACHED_ENTERED = "PUNK_LAST_CACHED_ENTERED" + searchSuffix;
+var CACHED_ENTERED = "PUNK_CACHED_ENTERED" + searchSuffix;
 
 // set default cache values
 if(!localStorage.getItem(LAST_CACHED_WIN)) {
@@ -47,24 +72,6 @@ var clearCache = function(evt) {
 var working = false;
 // assumes that there are always 50 GAs on a page
 var lastPage = Math.ceil(parseInt($("div.pagination__results").children("strong:last").text().replace(/,/, ""), 10) / 50);
-
-// taken from StackOverflow: http://stackoverflow.com/a/3855394
-var qs = (function(a) {
-    if (a === "") {
-        return {};
-    }
-    var b = {};
-    for (var i = 0; i < a.length; ++i) {
-        var p = a[i].split('=', 2);
-        if (p.length == 1) {
-            b[p[0]] = "";
-        }
-        else {
-            b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
-        }
-    }
-    return b;
-})(window.location.search.substr(1).split('&'));
 
 var parseSteamGiftsTime = function(sg_time) {
     var parts = sg_time.match(/^(.*), ([0-9]+):([0-9]+)(am|pm)$/);
