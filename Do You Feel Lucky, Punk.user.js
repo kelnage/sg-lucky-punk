@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.4.1
+// @version      1.5.0
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -17,7 +17,32 @@ var WAIT_MILLIS = 500;
 var PAGE_LOAD = 300;
 var ENTERED_URL = "http://www.steamgifts.com/giveaways/entered/search";
 var WINS_URL = "http://www.steamgifts.com/giveaways/won/search";
-var BAD_DATES = [{"begin": new Date(2014, 5, 1), "end": new Date(2014, 9, 19)}];
+var BAD_DATES = [{"begin": new Date(2014, 4, 1), "end": new Date(2014, 9, 19)}];
+
+// Local storage keys for caching results
+var LAST_CACHED_WIN = "PUNK_LAST_CACHED_WINS";
+var CACHED_WINS = "PUNK_CACHED_WINS";
+var LAST_CACHED_ENTERED = "PUNK_LAST_CACHED_ENTERED";
+var CACHED_ENTERED = "PUNK_CACHED_ENTERED";
+
+// set default cache values
+if(!localStorage.getItem(LAST_CACHED_WIN)) {
+    localStorage.setItem(LAST_CACHED_WIN, new Date(0));
+    localStorage.setItem(CACHED_WINS, "{}");
+}
+if(!localStorage.getItem(LAST_CACHED_ENTERED)) {
+    localStorage.setItem(LAST_CACHED_ENTERED, new Date(0));
+    localStorage.setItem(CACHED_ENTERED, "{}");
+}
+
+var clearCache = function(evt) {
+    evt.preventDefault();
+    localStorage.setItem(LAST_CACHED_WIN, new Date(0));
+    localStorage.setItem(CACHED_WINS, "{}");
+    localStorage.setItem(LAST_CACHED_ENTERED, new Date(0));
+    localStorage.setItem(CACHED_ENTERED, "{}");
+    return false;
+}
 
 var working = false;
 // assumes that there are always 50 GAs on a page
@@ -69,6 +94,7 @@ var parseSteamGiftsTime = function(sg_time) {
     }
     result.setMinutes(mins);
     result.setSeconds(0);
+    result.setMilliseconds(0);
     return result;
 };
 
@@ -84,8 +110,8 @@ var filterBadDates = function(i) {
 
 var dateToDayString = function(date) {
     var day = new Date(date);
-    day.setMinutes(0);
-    day.setHours(0);
+    day.setUTCMinutes(0);
+    day.setUTCHours(0);
     return day.toISOString().replace(/T/, " ").replace(/\.[0-9]{3}Z/, "");
 };
 
@@ -141,23 +167,36 @@ var extractWon = function(input) {
         .get();
 };
 
-var summariseDailyValues = function(giveaways, dailySum) {
+var summariseDailyValues = function(giveaways, dailySum, earliest) {
+    var maxDate = new Date(0), minDate = new Date();
     giveaways.forEach(function(ga) {
-        var dayString = dateToDayString(ga.date);
-        if(dayString in dailySum) {
-            dailySum[dayString] += ga.value;
-        } else {
-            dailySum[dayString] = ga.value;
+        if(ga.date > maxDate) {
+            maxDate = ga.date;
+        }
+        if(ga.date < minDate) {
+            minDate = ga.date;
+        }
+        if(ga.date > earliest) {
+            var dayString = dateToDayString(ga.date);
+            if(dayString in dailySum) {
+                dailySum[dayString] += ga.value;
+            } else {
+                dailySum[dayString] = ga.value;
+            }
         }
     });
+    return [minDate, maxDate];
 };
 
-var fetchWon = function(dailyWins, page, callback) {
+var fetchWon = function(dailyWins, page, earliest, callback) {
     $.get(WINS_URL, {"page": page}, function(data) {
-        summariseDailyValues(extractWon(data), dailyWins);
-        if($("div.pagination__navigation > a > span:contains('Next')", data).size() === 1) {
+        var dateRange = summariseDailyValues(extractWon(data), dailyWins, earliest);
+        if(dateRange[1] > new Date(localStorage.getItem(LAST_CACHED_WIN))) {
+            localStorage.setItem(LAST_CACHED_WIN, dateRange[1]);
+        }
+        if($("div.pagination__navigation > a > span:contains('Next')", data).size() === 1 && dateRange[0] > earliest) {
             setTimeout(function() {
-                fetchWon(dailyWins, page + 1, callback);
+                fetchWon(dailyWins, page + 1, earliest, callback);
             }, WAIT_MILLIS);
         } else {
             callback();
@@ -165,12 +204,15 @@ var fetchWon = function(dailyWins, page, callback) {
     });
 };
 
-var fetchEntered = function(dailyEntered, page, callback) {
+var fetchEntered = function(dailyEntered, page, earliest, callback) {
     $.get(ENTERED_URL, {"q": qs.q, "page": page}, function(data) {
-        summariseDailyValues(extractEntries(data), dailyEntered);
-        if($("div.pagination__navigation > a > span:contains('Next')", data).size() === 1) {
+        var dateRange = summariseDailyValues(extractEntries(data), dailyEntered, earliest);
+        if(dateRange[1] > new Date(localStorage.getItem(LAST_CACHED_ENTERED))) {
+            localStorage.setItem(LAST_CACHED_ENTERED, dateRange[1]);
+        }
+        if($("div.pagination__navigation > a > span:contains('Next')", data).size() === 1 && dateRange[0] > earliest) {
             setTimeout(function() {
-                fetchEntered(dailyEntered, page + 1, callback);
+                fetchEntered(dailyEntered, page + 1, earliest, callback);
             }, WAIT_MILLIS);
             if(isNaN(lastPage)) {
                 $("span#punk_result").text(" Calculating your odds of success now. Please be patient - I've requested " + 
@@ -186,15 +228,24 @@ var fetchEntered = function(dailyEntered, page, callback) {
 };
 
 var sortDateMapAndPlot = function(map, plot, cumulative) {
-    var list = [], total = 0;
+    var smallest = new Date(), today = new Date(), total = 0;
     for(var day in map) {
-        list.push([day, map[day]]);
+        var test = new Date(day);
+        if(test < smallest) {
+            smallest = test;
+        }
     }
-    list.sort(function(a, b) { return (a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0)); });
-    for(var i in list) {
-        total += list[i][1];
-        plot.x.push(list[i][0]);
-        plot.y.push((cumulative ? total : list[i][1]));
+    smallest.setDate(smallest.getDate() - 1);
+    plot.x.push(dateToDayString(smallest));
+    plot.y.push(0);
+    while(smallest <= today) {
+        smallest.setDate(smallest.getDate() + 1);
+        var dayString = dateToDayString(smallest);
+        if(map[dayString]) {
+            total += map[dayString];
+        }
+        plot.x.push(dayString);
+        plot.y.push((cumulative ? total : (map[dayString] ? map[dayString] : 0)));
     }
     return total;
 };
@@ -209,18 +260,20 @@ var calculateExpectedTotalValue = function(evt) {
             $("span#punk_result").text(" Calculating your odds of success now. Please be patient - this should take about " + 
                                        formatTime(lastPage * (WAIT_MILLIS + PAGE_LOAD)));
         }
-        var totalWon = 0, dailySum = {}, dailyWins = {},
+        var totalWon = 0, dailySum = JSON.parse(localStorage.getItem(CACHED_ENTERED)), dailyWins = JSON.parse(localStorage.getItem(CACHED_WINS)),
             expectedWins = {"x": [], "y": [], "type": "bar", "name": "Expected wins"},
-            actualWins = {"x": [], "y": [], "type": "scatter", "name": "Actual wins"};
+            actualWins = {"x": [], "y": [], "type": "scatter", "mode": "lines", "name": "Actual wins"};
         // assumes that fetching won GAs will be quicker than fetching entered GAs
         // if searching won GAs works, then could do this also with query
         if(!qs.q) {
-            fetchWon(dailyWins, 1, function() {
+            fetchWon(dailyWins, 1, new Date(localStorage.getItem(LAST_CACHED_WIN)), function() {
                 totalWon = sortDateMapAndPlot(dailyWins, actualWins, true);
+                localStorage.setItem(CACHED_WINS, JSON.stringify(dailyWins));
             });
         }
-        fetchEntered(dailySum, 1, function() {
+        fetchEntered(dailySum, 1, new Date(localStorage.getItem(LAST_CACHED_ENTERED)), function() {
             var totalExpectedValue = sortDateMapAndPlot(dailySum, expectedWins, true);
+            localStorage.setItem(CACHED_ENTERED, JSON.stringify(dailySum));
             if(qs.q) {
                 $("span#punk_result").html(
                     " Based on the finished GAs you have entered for \"" + qs.q + "\", you would expect to have won approximately <strong title=\"" +
@@ -231,7 +284,8 @@ var calculateExpectedTotalValue = function(evt) {
                 $("span#punk_result").html(
                     " Based on the finished GAs you have entered, you would expect to have won approximately <strong title=\"" +
                     totalExpectedValue.toFixed(4) + "\">" + 
-                    totalExpectedValue.toFixed(1) + "</strong> of them. You've won <strong>" + luckRatio.toFixed(0) + "%</strong> of expected GAs - " +
+                    totalExpectedValue.toFixed(1) + "</strong> of them but you've actually won <strong>" + totalWon + "</strong>. You've won <strong>" + 
+                    luckRatio.toFixed(0) + "%</strong> of expected GAs - " +
                     (luckRatio.toFixed(0) >= 100 ? "lucky you" : "unlucky" ) + "! <a href=\"#\" id=\"punk_show_plot\" style=\"font-weight: bold\">Plot it!</a>");
             }
             $("#punk_show_plot").click(function(evt) {
@@ -254,7 +308,9 @@ var calculateExpectedTotalValue = function(evt) {
 var $section = $("<div style=\"padding: 0.5em 0\"></div>");
 var $btn = $("<a href=\"#\" id=\"punk_button\" style=\"font-weight: bold\">Do You Feel Lucky, Punk?</a>")
     .click(calculateExpectedTotalValue);
-$section.append($btn);
-$section.append("<span id=\"punk_result\"></span>");
+var $btnClear = $("<a href=\"#\" id=\"punk_clear\" style=\"font-style: italic; font-size: smaller\">Clear cached results</a>")
+    .click(clearCache);
+$section.append($btn).append(" ").append($btnClear);
+$btn.after("<span id=\"punk_result\"></span>");
 $section.append("<div id=\"punk_plot\" style=\"display: none; padding: 0.3em 0; width: " + $('.page__heading').width() + "px; height: 400px;\"></div>")
 $(".page__heading").after($section);
