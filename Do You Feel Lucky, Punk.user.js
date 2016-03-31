@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.5.0
+// @version      1.5.1
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        http://www.steamgifts.com/giveaways/entered*
@@ -230,7 +230,7 @@ var fetchEntered = function(dailyEntered, page, earliest, callback) {
 var sortDateMapAndPlot = function(map, plot, cumulative) {
     var smallest = new Date(), today = new Date(), total = 0;
     for(var day in map) {
-        var test = new Date(day);
+        var test = new Date(day.replace(/ /, "T"));
         if(test < smallest) {
             smallest = test;
         }
