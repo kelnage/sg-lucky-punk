@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.5.2
+// @version      1.5.3
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
-// @match        http://www.steamgifts.com/giveaways/entered*
+// @match        https://www.steamgifts.com/giveaways/entered*
 // @grant        none
 // @require      http://cdn.plot.ly/plotly-latest.min.js
 // @updateURL    https://raw.githubusercontent.com/kelnage/sg-lucky-punk/master/Do%20You%20Feel%20Lucky%2C%20Punk.meta.js
@@ -33,8 +33,8 @@ var qs = (function(a) {
 
 var WAIT_MILLIS = 500;
 var PAGE_LOAD = 300;
-var ENTERED_URL = "http://www.steamgifts.com/giveaways/entered/search";
-var WINS_URL = "http://www.steamgifts.com/giveaways/won/search";
+var ENTERED_URL = "https://www.steamgifts.com/giveaways/entered/search";
+var WINS_URL = "https://www.steamgifts.com/giveaways/won/search";
 var BAD_DATES = [{"begin": new Date(2014, 4, 1), "end": new Date(2014, 9, 19)}];
 
 var searchSuffix = (function(q) {
