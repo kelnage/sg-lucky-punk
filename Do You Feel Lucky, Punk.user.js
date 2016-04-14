@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.5.3
+// @version      1.5.4
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        https://www.steamgifts.com/giveaways/entered*
@@ -49,6 +49,23 @@ var LAST_CACHED_WIN = "PUNK_LAST_CACHED_WINS" + searchSuffix;
 var CACHED_WINS = "PUNK_CACHED_WINS" + searchSuffix;
 var LAST_CACHED_ENTERED = "PUNK_LAST_CACHED_ENTERED" + searchSuffix;
 var CACHED_ENTERED = "PUNK_CACHED_ENTERED" + searchSuffix;
+var CACHE_VERSION = "PUNK_CACHE_VERSION" + searchSuffix;
+
+var clearCache = function(evt) {
+    if(evt) {
+        evt.preventDefault();
+    }
+    localStorage.setItem(LAST_CACHED_WIN, new Date(0));
+    localStorage.setItem(CACHED_WINS, "{}");
+    localStorage.setItem(LAST_CACHED_ENTERED, new Date(0));
+    localStorage.setItem(CACHED_ENTERED, "{}");
+    return false;
+};
+
+if(!localStorage.getItem(CACHE_VERSION)) {
+    clearCache();
+    localStorage.setItem(CACHE_VERSION, "1");
+}
 
 // set default cache values
 if(!localStorage.getItem(LAST_CACHED_WIN)) {
@@ -58,15 +75,6 @@ if(!localStorage.getItem(LAST_CACHED_WIN)) {
 if(!localStorage.getItem(LAST_CACHED_ENTERED)) {
     localStorage.setItem(LAST_CACHED_ENTERED, new Date(0));
     localStorage.setItem(CACHED_ENTERED, "{}");
-}
-
-var clearCache = function(evt) {
-    evt.preventDefault();
-    localStorage.setItem(LAST_CACHED_WIN, new Date(0));
-    localStorage.setItem(CACHED_WINS, "{}");
-    localStorage.setItem(LAST_CACHED_ENTERED, new Date(0));
-    localStorage.setItem(CACHED_ENTERED, "{}");
-    return false;
 }
 
 var working = false;
@@ -113,7 +121,7 @@ var filterBadDates = function(i) {
         }
     }
     return true;
-}
+};
 
 var dateToDayString = function(date) {
     var day = new Date(date);
@@ -151,9 +159,9 @@ var extractEntries = function(input) {
         })
         .map(function(i, e) {
             var $e = $(e);
-            var copies = $e.find("a.table__column__heading").text().match(/\(([0-9]+) Copies\)/); 
+            var copies = $e.find("a.table__column__heading").text().match(/\(([0-9,]+) Copies\)/);
             copies = (copies === null ? 1 : parseInt(copies[1], 10)); // only multi-GAs have the (X Copies) text in their title, default to 1 copy
-            var entries = parseInt($($e.children().get(2)).text().replace(/,/, ""), 10); // remove number formatting
+            var entries = parseInt($($e.children().get(2)).text().replace(/,/g, ""), 10); // remove number formatting
             var date = parseSteamGiftsTime($($e.find("div:nth-child(2) > p:nth-child(2) > span")).attr("title"));
             return {"copies": copies, "entries": entries, "date": date, "value": copies / entries};
         })
@@ -319,5 +327,5 @@ var $btnClear = $("<a href=\"#\" id=\"punk_clear\" style=\"font-style: italic; f
     .click(clearCache);
 $section.append($btn).append(" ").append($btnClear);
 $btn.after("<span id=\"punk_result\"></span>");
-$section.append("<div id=\"punk_plot\" style=\"display: none; padding: 0.3em 0; width: " + $('.page__heading').width() + "px; height: 400px;\"></div>")
+$section.append("<div id=\"punk_plot\" style=\"display: none; padding: 0.3em 0; width: " + $('.page__heading').width() + "px; height: 400px;\"></div>");
 $(".page__heading").after($section);
