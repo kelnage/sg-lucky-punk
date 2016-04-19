@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.5.5
+// @version      1.6.0
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        https://www.steamgifts.com/giveaways/entered*
@@ -153,9 +153,8 @@ var formatTime = function(millis) {
 var extractEntries = function(input) {
     return $(".table__row-inner-wrap", input)
         .filter(function(i) {
-            // ignore GAs that haven't finished or have been deleted
-            return $($(this).children().get(4)).text() == "-" &&
-                $(this).find("p.table__column__deleted").size() === 0;
+            // ignore GAs that have been deleted
+            return $(this).find("p.table__column__deleted").size() === 0;
         })
         .map(function(i, e) {
             var $e = $(e);
@@ -163,7 +162,8 @@ var extractEntries = function(input) {
             copies = (copies === null ? 1 : parseInt(copies[1].replace(/,/g, ""), 10)); // only multi-GAs have the (X Copies) text in their title, default to 1 copy
             var entries = parseInt($($e.children().get(2)).text().replace(/,/g, ""), 10); // remove number formatting
             var date = parseSteamGiftsTime($($e.find("div:nth-child(2) > p:nth-child(2) > span")).attr("title"));
-            return {"copies": copies, "entries": entries, "date": date, "value": copies / entries};
+            var future = $($e.children().get(4)).text() !== "-";
+            return {"copies": copies, "entries": entries, "date": date, "value": copies / entries, "future": future};
         })
         .filter(filterBadDates)
         .get();
@@ -191,7 +191,7 @@ var summariseDailyValues = function(giveaways, dailySum, earliest) {
         if(ga.date < minDate) {
             minDate = ga.date;
         }
-        if(ga.date > earliest) {
+        if(ga.date > earliest || !earliest) {
             var dayString = dateToDayString(ga.date);
             if(dayString in dailySum) {
                 dailySum[dayString] += ga.value;
@@ -219,21 +219,25 @@ var fetchWon = function(dailyWins, page, earliest, callback) {
     });
 };
 
-var fetchEntered = function(dailyEntered, page, earliest, callback) {
+var fetchEntered = function(dailyEntered, futureEntered, page, earliest, callback) {
     $.get(ENTERED_URL, {"q": qs.q, "page": page}, function(data) {
-        var dateRange = summariseDailyValues(extractEntries(data), dailyEntered, earliest);
+        var entries = extractEntries(data);
+        var old = entries.filter(function(e, i) { return !e.future; });
+        var future = entries.filter(function(e, i) { return e.future; });
+        var dateRange = summariseDailyValues(old, dailyEntered, earliest);
+        summariseDailyValues(future, futureEntered);
         if(dateRange[1] > new Date(localStorage.getItem(LAST_CACHED_ENTERED))) {
             localStorage.setItem(LAST_CACHED_ENTERED, dateRange[1]);
         }
         if($("div.pagination__navigation > a > span:contains('Next')", data).size() === 1 && dateRange[0] > earliest) {
             setTimeout(function() {
-                fetchEntered(dailyEntered, page + 1, earliest, callback);
+                fetchEntered(dailyEntered, futureEntered, page + 1, earliest, callback);
             }, WAIT_MILLIS);
             if(isNaN(lastPage)) {
-                $("span#punk_result").text(" Calculating your odds of success now. Please be patient - I've requested " + 
+                $("span#punk_result").text(" Calculating your odds of success now. Please be patient - I've requested " +
                                            page + " page(s) of your entered GAs");
             } else {
-                $("span#punk_result").text(" Calculating your odds of success now. Please be patient - this should take another " + 
+                $("span#punk_result").text(" Calculating your odds of success now. Please be patient - this should take another " +
                                            formatTime((lastPage - page) * (WAIT_MILLIS + PAGE_LOAD)));
             }
         } else {
@@ -242,18 +246,25 @@ var fetchEntered = function(dailyEntered, page, earliest, callback) {
     });
 };
 
-var sortDateMapAndPlot = function(map, plot, cumulative) {
-    var smallest = new Date(), today = new Date(), total = 0;
+var sortDateMapAndPlot = function(map, plot, cumulative, start, maxDate, minDate) {
+    var smallest = (minDate ? minDate : new Date()), largest = (maxDate ? maxDate : new Date(0)), total = (start ? start : 0);
+    largest.setUTCHours(0);
+    largest.setUTCMinutes(0);
+    largest.setUTCSeconds(0);
     for(var day in map) {
         var test = new Date(day.replace(/ /, "T"));
         if(test < smallest) {
             smallest = test;
         }
+        if(test > largest) {
+            largest = test;
+        }
     }
-    smallest.setDate(smallest.getDate() - 1);
+    smallest.setUTCDate(smallest.getDate() - 1);
+    smallest.setUTCSeconds(0);
     plot.x.push(dateToDayString(smallest));
     plot.y.push(0);
-    while(smallest <= today) {
+    while(smallest < largest) {
         smallest.setDate(smallest.getDate() + 1);
         var dayString = dateToDayString(smallest);
         if(map[dayString]) {
@@ -262,7 +273,7 @@ var sortDateMapAndPlot = function(map, plot, cumulative) {
         plot.x.push(dayString);
         plot.y.push((cumulative ? total : (map[dayString] ? map[dayString] : 0)));
     }
-    return total;
+    return {"total": total, "first": smallest, "last": largest};
 };
 
 var calculateExpectedTotalValue = function(evt) {
@@ -272,40 +283,42 @@ var calculateExpectedTotalValue = function(evt) {
         if(isNaN(lastPage)) {
             $("span#punk_result").text("Calculating your odds of success now. Please be patient - this could take a little while...");
         } else {
-            $("span#punk_result").text(" Calculating your odds of success now. Please be patient - this should take about " + 
+            $("span#punk_result").text(" Calculating your odds of success now. Please be patient - this should take about " +
                                        formatTime(lastPage * (WAIT_MILLIS + PAGE_LOAD)));
         }
-        var totalWon = 0, dailySum = JSON.parse(localStorage.getItem(CACHED_ENTERED)), dailyWins = JSON.parse(localStorage.getItem(CACHED_WINS)),
+        var totalWon = 0, dailySum = JSON.parse(localStorage.getItem(CACHED_ENTERED)), dailyWins = JSON.parse(localStorage.getItem(CACHED_WINS)), futureSum = {},
             expectedWins = {"x": [], "y": [], "type": "bar", "name": "Expected wins"},
+            futureWins = {"x": [], "y": [], "type": "bar", "name": "Future wins"},
             actualWins = {"x": [], "y": [], "type": "scatter", "mode": "lines", "name": "Actual wins"};
         // assumes that fetching won GAs will be quicker than fetching entered GAs
         // if searching won GAs works, then could do this also with query
         if(!qs.q) {
-            fetchWon(dailyWins, 1, new Date(localStorage.getItem(LAST_CACHED_WIN)), function() {
-                totalWon = sortDateMapAndPlot(dailyWins, actualWins, true);
-                localStorage.setItem(CACHED_WINS, JSON.stringify(dailyWins));
-            });
+            fetchWon(dailyWins, 1, new Date(localStorage.getItem(LAST_CACHED_WIN)), function() {});
         }
-        fetchEntered(dailySum, 1, new Date(localStorage.getItem(LAST_CACHED_ENTERED)), function() {
-            var totalExpectedValue = sortDateMapAndPlot(dailySum, expectedWins, true);
+        fetchEntered(dailySum, futureSum, 1, new Date(localStorage.getItem(LAST_CACHED_ENTERED)), function() {
+            var dailyExpPlot = sortDateMapAndPlot(dailySum, expectedWins, true, null, new Date()), totalExpectedValue = dailyExpPlot.total;
+            sortDateMapAndPlot(futureSum, futureWins, true, totalExpectedValue, null, dailyExpPlot.last);
+            var dailyWinsPlot = sortDateMapAndPlot(dailyWins, actualWins, true, 0, dailyExpPlot.last);
+            totalWon = dailyWinsPlot.total;
+            localStorage.setItem(CACHED_WINS, JSON.stringify(dailyWins));
             localStorage.setItem(CACHED_ENTERED, JSON.stringify(dailySum));
             if(qs.q) {
                 $("span#punk_result").html(
                     " Based on the finished GAs you have entered for \"" + qs.q + "\", you would expect to have won approximately <strong title=\"" +
-                    totalExpectedValue.toFixed(4) + "\">" + 
+                    totalExpectedValue.toFixed(4) + "\">" +
                     totalExpectedValue.toFixed(1) + "</strong> of them. <a href=\"#\" id=\"punk_show_plot\" style=\"font-weight: bold\">Plot it!</a>");
             } else {
                 var luckRatio = (totalWon / totalExpectedValue) * 100;
                 $("span#punk_result").html(
                     " Based on the finished GAs you have entered, you would expect to have won approximately <strong title=\"" +
-                    totalExpectedValue.toFixed(4) + "\">" + 
-                    totalExpectedValue.toFixed(1) + "</strong> of them but you've actually won <strong>" + totalWon + "</strong>. You've won <strong>" + 
+                    totalExpectedValue.toFixed(4) + "\">" +
+                    totalExpectedValue.toFixed(1) + "</strong> of them but you've actually won <strong>" + totalWon + "</strong>. You've won <strong>" +
                     luckRatio.toFixed(0) + "%</strong> of expected GAs - " +
                     (luckRatio.toFixed(0) >= 100 ? "lucky you" : "unlucky" ) + "! <a href=\"#\" id=\"punk_show_plot\" style=\"font-weight: bold\">Plot it!</a>");
             }
             $("#punk_show_plot").click(function(evt) {
                 evt.preventDefault();
-                var plots = [expectedWins];
+                var plots = [expectedWins, futureWins];
                 if(!qs.q) {
                     plots.push(actualWins);
                 }
