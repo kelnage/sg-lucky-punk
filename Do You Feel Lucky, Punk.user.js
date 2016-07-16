@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.6.0
+// @version      1.6.1
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        https://www.steamgifts.com/giveaways/entered*
@@ -154,7 +154,7 @@ var extractEntries = function(input) {
     return $(".table__row-inner-wrap", input)
         .filter(function(i) {
             // ignore GAs that have been deleted
-            return $(this).find("p.table__column__deleted").size() === 0;
+            return $(this).find("p.table__column__deleted").length === 0;
         })
         .map(function(i, e) {
             var $e = $(e);
@@ -172,7 +172,7 @@ var extractEntries = function(input) {
 var extractWon = function(input) {
     return $(".table__row-inner-wrap", input)
         .filter(function(i) {
-            return $(this).find("div.table__gift-feedback-received > i.fa-check-circle").size() == 1;
+            return $(this).find("div.table__gift-feedback-received > i.fa-check-circle").length == 1;
         })
         .map(function(i, e) {
             var date = parseSteamGiftsTime($($(e).find("div:nth-child(2) > p:nth-child(2) > span")).attr("title"));
@@ -209,7 +209,7 @@ var fetchWon = function(dailyWins, page, earliest, callback) {
         if(dateRange[1] > new Date(localStorage.getItem(LAST_CACHED_WIN))) {
             localStorage.setItem(LAST_CACHED_WIN, dateRange[1]);
         }
-        if($("div.pagination__navigation > a > span:contains('Next')", data).size() === 1 && dateRange[0] > earliest) {
+        if($("div.pagination__navigation > a > span:contains('Next')", data).length === 1 && dateRange[0] > earliest) {
             setTimeout(function() {
                 fetchWon(dailyWins, page + 1, earliest, callback);
             }, WAIT_MILLIS);
@@ -229,7 +229,7 @@ var fetchEntered = function(dailyEntered, futureEntered, page, earliest, callbac
         if(dateRange[1] > new Date(localStorage.getItem(LAST_CACHED_ENTERED))) {
             localStorage.setItem(LAST_CACHED_ENTERED, dateRange[1]);
         }
-        if($("div.pagination__navigation > a > span:contains('Next')", data).size() === 1 && dateRange[0] > earliest) {
+        if($("div.pagination__navigation > a > span:contains('Next')", data).length === 1 && dateRange[0] > earliest) {
             setTimeout(function() {
                 fetchEntered(dailyEntered, futureEntered, page + 1, earliest, callback);
             }, WAIT_MILLIS);
