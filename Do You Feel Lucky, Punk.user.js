@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Feel Lucky, Punk?
 // @namespace    http://www.steamgifts.com/user/kelnage
-// @version      1.6.1
+// @version      1.7.0
 // @description  Calculate the expected number of GAs you should have won based upon the GAs you've entered and the number of users who entered them
 // @author       kelnage
 // @match        https://www.steamgifts.com/giveaways/entered*
@@ -161,7 +161,7 @@ var extractEntries = function(input) {
             var copies = $e.find("a.table__column__heading").text().match(/\(([0-9,]+) Copies\)/);
             copies = (copies === null ? 1 : parseInt(copies[1].replace(/,/g, ""), 10)); // only multi-GAs have the (X Copies) text in their title, default to 1 copy
             var entries = parseInt($($e.children().get(2)).text().replace(/,/g, ""), 10); // remove number formatting
-            var date = parseSteamGiftsTime($($e.find("div:nth-child(2) > p:nth-child(2) > span")).attr("title"));
+            var date = new Date(parseInt($($e.find("span[data-timestamp]")).attr("data-timestamp")) * 1000);
             var future = $($e.children().get(4)).text() !== "-";
             return {"copies": copies, "entries": entries, "date": date, "value": copies / entries, "future": future};
         })
@@ -175,7 +175,7 @@ var extractWon = function(input) {
             return $(this).find("div.table__gift-feedback-received > i.fa-check-circle").length == 1;
         })
         .map(function(i, e) {
-            var date = parseSteamGiftsTime($($(e).find("div:nth-child(2) > p:nth-child(2) > span")).attr("title"));
+            var date = new Date(parseInt($($(e).find("span[data-timestamp]")).attr("data-timestamp")) * 1000);
             return {"date": date, "value": 1};
         })
         .filter(filterBadDates)
